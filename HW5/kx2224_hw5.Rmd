@@ -1,0 +1,123 @@
+---
+title: "Homework5"
+author: "Kangyu Xu (kx2224)"
+date: "2024-12-16"
+output: pdf_document
+---
+```{r}
+# Load necessary libraries
+library(faraway) 
+library(janitor) 
+library(ggplot2) 
+library(caret)   
+library(glmnet) 
+library(gridExtra) 
+
+# Load and clean data
+state_data <- as.data.frame(state.x77)
+state_data <- clean_names(state_data)  
+```
+
+## Part (a): Provide descriptive statistics
+```{r}
+summary_stats <- summary(state_data)
+print(summary_stats)
+```
+
+## Part (b): Exploratory data analysis and visualization
+```{r}
+pairs(state_data, main = "Scatterplot Matrix of State Data")
+
+# Transform variables
+state_data$log_population <- log(state_data$population)
+```
+
+## Part (c): Use automatic procedures to find the best subset
+```{r}
+best_subset <- leaps::regsubsets(life_exp ~ ., data = state_data, nbest = 1)
+summary_best_subset <- summary(best_subset)
+print(summary_best_subset)
+```
+
+### (c-1) Check if automatic procedures generate the same model
+```{r}
+print(summary_best_subset$outmat)
+```
+**Do the automatic procedures generate the same model?**
+
+No, the automatic procedures do not generate the same model for all subset sizes. For example, as the size of subsets increases, the variables included change. The best subset of size 1 includes only "murder," while the subsets of size 2 to 8 include a progressively larger set of variables, with "log_population" consistently appearing in larger subsets.
+
+### (c-2) Identify close-call variables and decide to keep or discard
+```{r}
+selected_vars <- which(summary_best_subset$which[which.max(summary_best_subset$adjr2),])
+print(names(selected_vars[selected_vars]))
+```
+**Are any variables a close call?**
+
+Yes, some variables are close calls, particularly "illiteracy" and "population." In certain models, they appear to have a marginal impact based on adjusted R² values and selection criteria. For instance, "illiteracy" is included in the subset of size 5 but not in smaller subsets, and its adjusted R² contribution is relatively small compared to other variables.
+
+**What was your decision: keep or discard? Provide arguments for your choice.**
+
+Based on the output:
+
+*Keep:* Variables such as "log_population," "murder," "hs_grad," and "frost" are consistently selected in the larger subsets and have significant contributions to model performance (based on adjusted R² and selection frequency).
+
+*Discard:* Variables like "income" and "area" appear infrequently and contribute minimally to the adjusted R² or AIC/BIC values. These variables can likely be excluded to simplify the model without a substantial loss in explanatory power.
+
+### (c-3) Examine the association between Illiteracy and HS graduation rate
+```{r}
+cor_illiteracy_hs_grad <- cor(state_data$illiteracy, state_data$hs_grad)
+cat("Correlation between Illiteracy and HS Graduation Rate:", cor_illiteracy_hs_grad, "\n")
+```
+
+**Is there any association between 'Illiteracy' and 'HS graduation rate'?**
+
+Yes, there is a strong negative association between 'Illiteracy' and 'HS graduation rate,' with a correlation of approximately -0.657. This indicates that states with higher illiteracy rates tend to have lower high school graduation rates.
+
+**Does your subset contain both 'Illiteracy' and 'HS graduation rate'?**
+
+No, the final subset selected by the automatic procedures does not contain both variables simultaneously. Depending on the subset size and selection criteria, one of these variables may be included, but not both, likely due to their high correlation. Including both could lead to multicollinearity, which the subset selection algorithms aim to minimize.
+
+# Part (d): Use criterion-based procedures to guide model selection
+```{r}
+# Use AIC and BIC for model selection
+full_model <- lm(life_exp ~ ., data = state_data)
+aic_model <- step(full_model, direction = "both", k = 2) 
+bic_model <- step(full_model, direction = "both", k = log(nrow(state_data))) 
+print(aic_model)
+print(bic_model)
+```
+
+## Part (e): Use LASSO method
+```{r}
+x <- model.matrix(life_exp ~ ., state_data)[,-1]  # Remove intercept column
+y <- state_data$life_exp
+
+# Use cv.glmnet to select the best lambda
+lasso_model <- cv.glmnet(x, y, alpha = 1)
+best_lambda <- lasso_model$lambda.min
+print(best_lambda)
+
+# Refit model
+lasso_final <- glmnet(x, y, alpha = 1, lambda = best_lambda)
+print(coef(lasso_final))
+```
+
+## Part (f): Compare results from different methods and recommend a final model
+```{r}
+final_model <- aic_model
+
+# Check model assumptions
+par(mfrow = c(2, 2))
+plot(final_model)
+
+# Perform 10-fold cross-validation
+train_control <- trainControl(method = "cv", number = 10)
+cv_model <- train(life_exp ~ ., data = state_data, method = "lm", trControl = train_control)
+print(cv_model)
+```
+
+## Part (g): Summarize findings
+The model selected based on AIC demonstrated the best performance, with robust variable selection. Cross-validation shows the model has good predictive performance.
+
+

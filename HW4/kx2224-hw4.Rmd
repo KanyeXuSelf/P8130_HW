@@ -1,0 +1,278 @@
+---
+title: "kx2224_hw4"
+author: "Kangyu Xu (kx2224)"
+date: "2024-11-18"
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(knitr)
+library(ggplot2)
+library(dplyr)
+```
+
+## Problem 1
+### (a)
+
+```{r}
+# Data
+data = c(125, 123, 117, 123, 115, 112, 128, 118, 124, 111, 116, 109, 125, 120, 
+          113, 123, 112, 118, 121, 118, 122, 115, 105, 118, 131)
+
+# Hypothetical median
+median_hypothesis = 120
+
+# Compare data with the hypothetical median
+signs = data - median_hypothesis
+
+# Count positive and negative signs
+positive_count = sum(signs > 0) # Count of values greater than 120
+negative_count = sum(signs < 0) # Count of values less than 120
+
+# Test statistic for the sign test
+test_statistic = min(positive_count, negative_count)
+
+# Total number of non-zero signs
+n = positive_count + negative_count
+
+# Calculate the p-value for a one-tailed test (median < 120)
+p_value = pbinom(test_statistic, size = n, prob = 0.5, lower.tail = TRUE)
+
+# Output results
+cat("Sign Test Results:\n")
+cat("Test Statistic (minimum count of signs):", test_statistic, "\n")
+cat("p-value:", p_value, "\n")
+```
+As p-value is `r p_value` > 0.05. Therefore, we fail to reject the null hypothesis. There is no significant evidence that the median is less than 120.
+
+### (b)
+```{r}
+wilcox_test_result = wilcox.test(data, mu = 120, alternative = "less")
+print("Wilcoxon Signed-Rank Test Result:")
+print(wilcox_test_result)
+```
+Similarly, the p-value is greater than 0.05, indicating no significant evidence to conclude that the median blood sugar reading is less than 120 at the 0.05 level.
+
+## Problem 2
+### (a)
+```{r}
+file_path = "Brain.xlsx"
+brain_data = read_excel(file_path)|>
+  janitor::clean_names()
+nonhuman_data = brain_data[brain_data$species != "Homo sapiens", ]|>
+  janitor::clean_names()
+head(nonhuman_data)
+```
+```{r}
+model = lm(`glia_neuron_ratio` ~ `ln_brain_mass`, data = nonhuman_data)
+summary(model)
+```
+Finish fitting a model.
+
+### (b)
+```{r}
+# Extract human ln(brain mass)
+human_ln_brain_mass = brain_data[brain_data$species == "Homo sapiens", ]$ln_brain_mass
+human_ln_brain_mass
+```
+```{r}
+# Predict the glia-neuron ratio for humans
+predicted_human_ratio = predict(model, newdata = data.frame(ln_brain_mass = human_ln_brain_mass))
+
+# Print the predicted ratio
+predicted_human_ratio
+```
+
+### (c)
+The most reasonable range for the prediction is an interval for the predicted mean glia-neuron ratio, as our focus is on estimating the population average rather than individual cases.
+
+### (d)
+```{r}
+# 95% confidence interval for the predicted mean glia-neuron ratio
+mean_interval = predict(model, newdata = data.frame(ln_brain_mass = human_ln_brain_mass), interval = "confidence")
+
+# Print intervals
+mean_interval
+```
+
+The 95% confidence interval is [1.230, 1.713]. The observed glia-neuron ratio for humans is 1.65, which falls within this interval. Therefore, we cannot reject the null hypothesis, indicating that the human brain does not have an excessive glia-neuron ratio for its size compared to other primates. This suggests that the ratio is consistent with what would be expected based on brain mass, similar to other primates.
+
+### (e)
+The human data point lies far beyond the range of brain masses observed in non-human primates, introducing greater uncertainty into the linear regression model. This raises the possibility that the relationship between brain mass and the glia-neuron ratio may not remain linear across all primates, including humans. As a result, predictions for humans may be less reliable, and caution is needed when interpreting these results. To improve prediction accuracy and reduce uncertainty, it would be beneficial to include more data points from primates with brain masses closer to that of humans.
+
+## Problem 3
+### (a)
+```{r}
+heart_disease_data = read_csv("HeartDisease.csv")
+summary(heart_disease_data)
+```
+```{r}
+# Separate continuous and categorical variables
+continuous_vars = heart_disease_data |> select(totalcost, ERvisits, age, duration)
+categorical_vars = heart_disease_data |> select(gender, complications)
+# Descriptive statistics for continuous variables
+summary(continuous_vars)
+```
+```{r}
+# Frequency table for categorical variables
+lapply(categorical_vars, table)
+```
+The main outcome is the total cost (totalcost), while the key predictor is the number of emergency room visits (ERvisits). Other significant covariates include the subscriber's age (age), gender (gender), total number of interventions or procedures performed (interventions), number of prescribed drugs (drugs), number of complications during heart disease treatment (complications), number of comorbidities experienced during the period (comorbidities), and the duration of the treatment condition in days (duration).
+
+### (b)
+```{r}
+# Plot histogram of 'totalcost'
+ggplot(heart_disease_data, aes(x = totalcost)) +
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.7) +
+  labs(title = "Distribution of Total Cost", x = "Total Cost", y = "Frequency")
+
+# Check if log transformation improves the distribution
+ggplot(heart_disease_data, aes(x = log(totalcost))) +
+  geom_histogram(bins = 30, fill = "green", alpha = 0.7) +
+  labs(title = "Log-Transformed Distribution of Total Cost", x = "Log(Total Cost)", y = "Frequency")
+
+```
+
+### (c)
+```{r}
+# Create the new variable
+heart_disease_data = heart_disease_data |> mutate(comp_bin = ifelse(complications == 0, 0, 1))
+
+# Check the frequency distribution of the new variable
+table(heart_disease_data$comp_bin)
+
+```
+
+### (d)
+```{r}
+# Fit a simple linear regression model with original 'totalcost'
+model_original = lm(totalcost ~ ERvisits, data = heart_disease_data)
+summary(model_original)
+
+# Scatterplot with regression line for original 'totalcost'
+ggplot(heart_disease_data, aes(x = ERvisits, y = totalcost)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Total Cost vs ER Visits", x = "ER Visits", y = "Total Cost")
+
+heart_disease_data =heart_disease_data |> 
+  mutate(log_totalcost = log(totalcost + 0.001)) |> 
+  select(id, log_totalcost, everything(), -totalcost)
+
+# Fit a simple linear regression model with log-transformed 'totalcost'
+model_log = lm(log_totalcost ~ ERvisits, data = heart_disease_data)
+summary(model_log)
+
+# Scatterplot with regression line for log-transformed 'totalcost'
+ggplot(heart_disease_data, aes(x = ERvisits, y = log_totalcost)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Log(Total Cost) vs ER Visits", x = "ER Visits", y = "Log(Total Cost)")
+
+```
+
+### (e)
+```{r}
+# Fit a multiple linear regression model using log-transformed 'totalcost'
+mlr_log_model = lm(log_totalcost ~ comp_bin + ERvisits, data = heart_disease_data)
+summary(mlr_log_model)
+```
+### (e): i
+```{r}
+# Add interaction term to test if 'comp_bin' is an effect modifier
+interaction_log_model = lm(log_totalcost ~ comp_bin * ERvisits, data = heart_disease_data)
+summary(interaction_log_model)
+
+# Compare models with and without the interaction term
+anova(mlr_log_model, interaction_log_model)
+```
+The p value for the interaction term is 0.357 > 0.05, therefore, we fail to reject the null hypothesis, indicating that comp_bin is not an effect modifier.
+
+
+
+
+
+
+#### (e): ii
+```{r}
+# Fit a model without 'comp_bin'
+model_no_comp_log = lm(log_totalcost ~ ERvisits, data = heart_disease_data)
+
+# Compare the models with and without 'comp_bin'
+anova(model_no_comp_log, mlr_log_model)
+
+# Check adjusted R-squared for both models
+summary(model_no_comp_log)$adj.r.squared
+summary(mlr_log_model)$adj.r.squared
+
+
+```
+`comp_bin` acts as a confounder because its inclusion in the model significantly improves the explanation of variance in log_totalcost. Excluding it would omit critical information that affects the relationship between ERvisits and log_totalcost.
+
+
+
+
+
+
+
+
+
+
+#### (e): iii
+```{r}
+# Evaluate significance of 'comp_bin' in the MLR model
+summary(mlr_log_model)$coefficients
+
+# Compare adjusted R-squared values of models with and without 'comp_bin'
+adj_r_squared_with_comp = summary(mlr_log_model)$adj.r.squared
+adj_r_squared_without_comp = summary(model_no_comp_log)$adj.r.squared
+
+adj_r_squared_with_comp
+adj_r_squared_without_comp
+
+```
+`comp_bin` should be retained in the final model to ensure that the results are accurate and account for its confounding effect.
+
+### (f)
+#### (f): i
+```{r}
+# Fit a multiple linear regression model with additional covariates
+mlr_full_model = lm(log_totalcost ~ comp_bin + ERvisits + age + gender + duration, data = heart_disease_data)
+summary(mlr_full_model)
+
+```
+The F-statistic is 52.18 with a p-value < 2.2e-16, indicating that the model successfully explains a significant portion of the variation in total cost.
+
+The estimated slopes for ERvisits, comp_bin, age, gender, and duration are 0.17, 1.53, -0.02, -0.32, and 0.006, respectively, when controlling for other covariates. This suggests that the number of emergency room visits, comp_bin, and duration have a positive effect on the total cost, while age and gender have a negative effect. Except for gender, all other predictors significantly impact the total cost, while the effect of gender on total cost cannot be determined conclusively based on this model.
+
+The R-squared value is 0.2502, indicating that this model explains a larger proportion of the variance in total cost compared to previous models.
+```{r}
+# Compare the adjusted R-squared of the SLR and MLR models
+slr_log_model = lm(log_totalcost ~ ERvisits, data = heart_disease_data)
+
+# Adjusted R-squared for the SLR model
+slr_adj_r2 = summary(slr_log_model)$adj.r.squared
+
+# Adjusted R-squared for the MLR model
+mlr_adj_r2 = summary(mlr_full_model)$adj.r.squared
+
+# Print adjusted R-squared values
+slr_adj_r2
+mlr_adj_r2
+
+# Compare models using ANOVA
+anova(slr_log_model, mlr_full_model)
+```
+
+The MLR model is preferred as it achieves a higher Adjusted R-square and a lower Residual Standard Error compared to the SLR model. By adjusting for additional covariates, the MLR model provides a more accurate estimate of the effect of ERvisits on total cost, while the SLR model overestimates this effect.
+
+
+
+
+
+
+
+
+
